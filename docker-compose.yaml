@@ -1,0 +1,164 @@
+---
+version: '3.8'
+networks:
+  external:
+    driver: bridge
+
+services:
+  duckdns:
+    image: linuxserver/duckdns
+    container_name: DUCKDNS
+    environment:
+      - TZ=${TIMEZONE}
+      - SUBDOMAINS=${DUCKDNS_SUBDOMAINS}
+      - TOKEN=${DUCKDNS_TOKEN}
+      - LOG_FILE=true
+    volumes:
+      - ./duckdns:/config
+    restart: always
+
+  nginx:
+    image: 'jc21/nginx-proxy-manager:latest'
+    restart: always
+    ports:
+      # These ports are in format <host-port>:<container-port>
+      - '80:80' # Public HTTP Port
+      - '443:443' # Public HTTPS Port
+      - '81:81' # Admin Web Port
+      # Add any other Stream port you want to expose
+      # - '21:21' # FTP
+    volumes:
+      - ./nginx/data:/data
+      - ./nginx/letsencrypt:/etc/letsencrypt
+
+  overseerr:
+    image: sctx/overseerr:latest
+    container_name: overseerr
+    environment:
+      - LOG_LEVEL=debug
+      - TZ=${TIMEZONE}
+    ports:
+      - 5055:5055
+    depends_on:
+      - radarr
+      - sonarr
+      - plexms
+    volumes:
+      - ./overseerr:/app/config
+    restart: always
+
+  plexms:
+    container_name: plexms
+    restart: always
+    image: plexinc/pms-docker:plexpass
+    devices:
+      - /dev/dri:/dev/dri
+    volumes:
+      - ./plex/docker/plexms:/config
+      - ./plex/Downloads/plex_tmp:/transcode
+      - ./plex/media:/media
+      - ./plex/docker/certs:/certs
+      - /tmp/plex:/transcode
+    network_mode: host
+    environment:
+      - TZ=${TIMEZONE}
+      - PLEX_CLAIM=${PLEX_CLAIM}
+      - PLEX_UID=${PUID}
+      - PLEX_GID=${PGID}
+      - ADVERTISE_IP=${PLEX_ADVERTISE_IP}
+
+  radarr:
+    image: linuxserver/radarr
+    container_name: radarr
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ./radarr:/config
+      - ./plex/media:/data
+      - ./plex/media/transmission/completed:/downloads
+    depends_on:
+      - transmission-openvpn
+      - prowlarr
+    ports:
+      - 7878:7878
+    restart: always
+
+  sonarr:
+    image: linuxserver/sonarr
+    container_name: sonarr
+    ports:
+      - 8989:8989
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ./sonarr:/config
+      - ./plex/media:/data
+      - ./plex/media/transmission/completed:/downloads
+    depends_on:
+      - transmission-openvpn
+      - prowlarr
+    restart: always
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ./prowlarr/data:/config
+    ports:
+      - 9696:9696
+    restart: always
+
+  flaresolverr:
+    # DockerHub mirror flaresolverr/flaresolverr:latest
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    environment:
+      - LOG_LEVEL=info
+      - LOG_HTML=false
+      - CAPTCHA_SOLVER=none
+      - TZ=${TIMEZONE}
+    ports:
+      - 8191:8191
+    restart: always
+
+  transmission-openvpn:
+    container_name: transmission-openvpn
+    cap_add:
+      - NET_ADMIN
+    dns:
+      - 1.1.1.1
+      - 1.0.0.1
+    volumes:
+      - ./transmission:/data:rw
+      - ./plex/media/transmission/completed:/data/completed:rw
+      - ./transmission:/config
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - OPENVPN_PROVIDER=${OPENVPN_PROVIDER}
+      - OPENVPN_CONFIG=${OPENVPN_CONFIG}
+      - OPENVPN_USERNAME=${OPENVPN_USERNAME}
+      - OPENVPN_PASSWORD=${OPENVPN_PASSWORD}
+      - OPENVPN_OPTS=${OPENVPN_OPTS}
+      - LOCAL_NETWORK=${OPENVPN_LOCAL_NETWORK}
+      - NORDVPN_COUNTRY=${OPENVPN_NORDVPN_COUNTRY}
+      - NORDVPN_CATEGORY=${OPENVPN_NORDVPN_CATEGORY}
+      - NORDVPN_PROTOCOL=${OPENVPN_NORDVPN_PROTOCOL}
+      - TRANSMISSION_UTP_ENABLED=false
+      - HEALTH_CHECK_HOST=${OPENVPN_HEALTH_CHECK_HOST}
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+    ports:
+      - 9091:9091
+    image: haugene/transmission-openvpn
+    restart: always
