@@ -78,9 +78,6 @@ services:
       - ./radarr:/config
       - ./plex/media:/data
       - ./plex/media/transmission/completed:/downloads
-    depends_on:
-      - transmission-openvpn
-      - prowlarr
     ports:
       - 7878:7878
     restart: always
@@ -98,9 +95,6 @@ services:
       - ./sonarr:/config
       - ./plex/media:/data
       - ./plex/media/transmission/completed:/downloads
-    depends_on:
-      - transmission-openvpn
-      - prowlarr
     restart: always
 
   prowlarr:
@@ -162,3 +156,24 @@ services:
       - 9091:9091
     image: haugene/transmission-openvpn
     restart: always
+
+  tautulli:
+    image: ghcr.io/tautulli/tautulli
+    container_name: tautulli
+    restart: always
+    volumes:
+      - ./tautulli:/config
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TIMEZONE}
+    ports:
+      - 8181:8181
+  recyclarr:
+    image: ghcr.io/recyclarr/recyclarr
+    container_name: recyclarr
+    user: 1000:1000
+    volumes:
+      - ./recyclarr:/config
+    environment:
+      - TZ=${TIMEZONE}
